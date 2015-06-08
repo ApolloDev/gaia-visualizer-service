@@ -23,49 +23,77 @@ class GAIA:
             self.confInfo = conf_info_
 
     def call(self):
-	xmlMessage = self.plotInfo.printXMLMessage()
-        httpConn = httplib.HTTPConnection(self.confInfo.serverURL,self.confInfo.serverPort,True)
-        if self.confInfo.debug:
-            httpConn.set_debuglevel(2)
-        httpConn.connect()
+        with open("log.txt","a") as f:
+            try:
+                xmlMessage = self.plotInfo.printXMLMessage()
+		print "Done Parsing XML Message"
+            except Exception as e:
+                f.write("XMLFAIL: %s\n"%str(e))
 
-        #xmlMessage = self.plotInfo.printXMLMessage()
-	#with open("out.xml","wb") as f:
-	#    f.write(xmlMessage)
+            try:
+                httpConn = httplib.HTTPConnection(self.confInfo.serverURL,self.confInfo.serverPort,True)
+                if self.confInfo.debug:
+                    httpConn.set_debuglevel(2)
+                httpConn.connect()
+            except Exception as e:
+                f.write("HTTPCONN FAILED: %s\n"%str(e))
 
-        headers = { Constants.MIME_CONTENT_TYPE: Constants.MIME_TEXT_XML,
-                    Constants.MIME_CONTENT_LENGTH: '%d; %s="%s"'\
-                    %(len(xmlMessage),Constants.MIME_CHARSET,Constants.MIME_ISO_8859_1)}
-        httpConn.request("GET",self.confInfo.serverURL,"%s"%xmlMessage,headers)
+            #xmlMessage = self.plotInfo.printXMLMessage()
+            #with open("out.xml","wb") as f:
+            #    f.write(xmlMessage)
 
-        response = httpConn.getresponse()
-        ### determine the file we are returning
-        responseFileType = response.getheader(Constants.MIME_CONTENT_TYPE)
-        responseLength = response.getheader(Constants.MIME_CONTENT_LENGTH)
-        if responseLength == 0:
-            raise RuntimeError("GAIA Server returned an empty visuzalization")
+            try:
+                headers = { Constants.MIME_CONTENT_TYPE: Constants.MIME_TEXT_XML,
+                            Constants.MIME_CONTENT_LENGTH: '%d; %s="%s"'%(len(xmlMessage),Constants.MIME_CHARSET,Constants.MIME_ISO_8859_1)}
+                httpConn.request("GET",self.confInfo.serverURL,"%s"%xmlMessage,headers)
+		print "Parsed Headers"
+            except Exception as e:
+                f.write("HEADERS FAILED: %s\n"%str(e))
+                
+            try:
+                response = httpConn.getresponse()
+            except Exception as e:
+                f.write("RESPONSE FAILED: %s\n"%str(e))
+                
+            ### determine the file we are returning
+            try:
+		print "Getting the Response"
+                responseFileType = response.getheader(Constants.MIME_CONTENT_TYPE)
+                responseLength = response.getheader(Constants.MIME_CONTENT_LENGTH)
+                if responseLength == 0:
+                    raise RuntimeError("GAIA Server returned an empty visuzalization")
+            except Exception as e:
+                f.write("RESPONSE 2 FAILED: %s\n"%str(s))
+            
+            try:
+                responseFileExt = ""
+                if responseFileType in Constants.fileExtensions.keys():
+                    responseFileExt = Constants.fileExtensions[responseFileType]
+                else:
+                    print 'WARNING: Unrecognized File Type returned from GAIA Server\n'\
+                        'File Statistics:\n'\
+                        '\tFile Type:%s\n'\
+                        '\tFile Size:%s\n'\
+                        '\tSaving to:%s'\
+                        %(responseFileType,str(responseLength),self.plotInfo.output_filename+".gaia")
+                    responseFileExt = ".gaia"
+		print "Getting File"
+            except Exception as e:
+                f.write("RESPONSE 3 FAILED: %s\n"%str(e))
+                
+            try:
+                responseOutFile = self.plotInfo.output_filename + responseFileExt
+                with open(responseOutFile,"wb") as f:
+                    f.write("%s"%response.read()) 
 
-        responseFileExt = ""
-        if responseFileType in Constants.fileExtensions.keys():
-            responseFileExt = Constants.fileExtensions[responseFileType]
-        else:
-            print 'WARNING: Unrecognized File Type returned from GAIA Server\n'\
-                  'File Statistics:\n'\
-                  '\tFile Type:%s\n'\
-                  '\tFile Size:%s\n'\
-                  '\tSaving to:%s'\
-                  %(responseFileType,str(responseLength),self.plotInfo.output_filename+".gaia")
-            responseFileExt = ".gaia"
+                if httpConn.sock:
+                    httpConn.sock.shutdown()
+                httpConn.close()
+		print "Close that Bitch"
+            except Exception as e:
+                f.write("CLOSING FAILED: %s\n"%str(e))
 
-        responseOutFile = self.plotInfo.output_filename + responseFileExt
-        with open(responseOutFile,"wb") as f:
-            f.write("%s"%response.read()) 
-
-        if httpConn.sock:
-            httpConn.sock.shutdown()
-        httpConn.close()
-
-
+                        
 class Constants:
     maximum_ABGR_value = int(255)
     minimum_ABGR_value = int(0)
